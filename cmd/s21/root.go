@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/s21platform/s21-cli/cmd/codegen"
+	"github.com/s21platform/s21/cmd/codegen"
 	"github.com/spf13/cobra"
 )
 
