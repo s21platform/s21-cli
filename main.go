@@ -1,6 +1,6 @@
 package main
 
-import "github.com/s21platform/s21/cmd/s21"
+import "github.com/s21platform/s21-cli/cmd/s21"
 
 func main() {
 	// Добавляем все команды к корневой команде

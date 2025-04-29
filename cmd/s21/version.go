@@ -3,7 +3,7 @@ package s21
 import (
 	"fmt"
 
-	"github.com/s21platform/s21/internal/version"
+	"github.com/s21platform/s21-cli/internal/version"
 	"github.com/spf13/cobra"
 )
 

@@ -1,4 +1,4 @@
-module github.com/s21platform/s21
+module github.com/s21platform/s21-cli
 
 go 1.22.8
 
