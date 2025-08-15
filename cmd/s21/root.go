@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/s21platform/s21-cli/cmd/codegen"
+	"github.com/s21platform/s21-cli/cmd/devenv"
 	"github.com/s21platform/s21-cli/internal/project"
 	"github.com/spf13/cobra"
 )
@@ -60,6 +61,9 @@ func Execute() {
 func AddCommands() {
 	// Регистрируем команду кодогенерации
 	rootCmd.AddCommand(codegen.NewCodegenCmd())
+
+	// Регистрируем команду devenv
+	rootCmd.AddCommand(devenv.NewDevenvCmd())
 
 	// Регистрируем команду версии
 	rootCmd.AddCommand(newVersionCmd())

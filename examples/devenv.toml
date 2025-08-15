@@ -1,0 +1,19 @@
+# Конфигурация локального окружения разработки
+
+[services.postgres]
+enabled = true
+version = "15"
+port = 5432
+user = "postgres"
+password = "postgres"
+database = "app"
+
+[services.redis]
+enabled = true
+version = "alpine"
+port = 6379
+
+[services.redpanda]
+enabled = true
+version = "latest"
+port = 9092
