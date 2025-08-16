@@ -18,7 +18,8 @@ func generateRandomSuffix() string {
 	return hex.EncodeToString(bytes)
 }
 
-const composeTemplate = `version: '3.8'
+const composeTemplate = `# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+version: '3.8'
 # Автоматически сгенерированный файл, не редактируйте его вручную!
 # Используйте devenv.toml для настройки окружения.
 
@@ -26,7 +27,7 @@ services:
 {{- if .Services.IsEnabled "postgres" }}
   postgres:
     image: postgres:15
-    container_name: dev-postgres-${DEVENV_SUFFIX}
+    container_name: {{ containerName "postgres" }}
     env_file:
       - .env.s21-cli
     environment:
@@ -44,7 +45,7 @@ services:
 {{- if .Services.IsEnabled "redis" }}
   redis:
     image: redis:alpine
-    container_name: dev-redis-${DEVENV_SUFFIX}
+    container_name: {{ containerName "redis" }}
     env_file:
       - .env.s21-cli
     ports:
@@ -58,7 +59,7 @@ services:
 {{- if .Services.IsEnabled "redpanda" }}
   redpanda:
     image: redpandadata/redpanda:latest
-    container_name: dev-redpanda-${DEVENV_SUFFIX}
+    container_name: {{ containerName "redpanda" }}
     env_file:
       - .env.s21-cli
     ports:
@@ -84,7 +85,7 @@ services:
       - --kafka-addr
       - PLAINTEXT://0.0.0.0:9092
       - --advertise-kafka-addr
-      - PLAINTEXT://redpanda-${DEVENV_SUFFIX}:9092
+      - PLAINTEXT://redpanda:9092
     healthcheck:
       test: ["CMD", "rpk", "cluster", "health"]
       interval: 10s
@@ -95,10 +96,11 @@ services:
 {{- if and (.Services.IsEnabled "redpanda") .Services.Redpanda.Topics }}
   init-topics:
     image: redpandadata/redpanda:latest
-    container_name: dev-init-topics-${DEVENV_SUFFIX}
+    container_name: {{ containerName "init-topics" }}
     depends_on:
-      redpanda-${DEVENV_SUFFIX}:
+      redpanda:
         condition: service_healthy
+        required: true
     networks:
       - dev_network
     entrypoint: ["/bin/sh"]
@@ -107,7 +109,7 @@ services:
       - |
         {{- range .Services.Redpanda.Topics }}
         echo "Creating topic {{.Name}}..."
-        rpk topic create {{.Name}} --brokers redpanda-${DEVENV_SUFFIX}:9092 --partitions {{.Partitions}} --replicas {{.ReplicationFactor}} || echo "Topic {{.Name}} might already exist"
+        rpk topic create {{.Name}} --brokers redpanda:9092 --partitions {{.Partitions}} --replicas {{.ReplicationFactor}} || echo "Topic {{.Name}} might already exist"
         {{- end }}
         echo "All topics have been created!"
 {{- end }}
@@ -115,17 +117,19 @@ services:
 {{- if .Services.IsEnabled "redpanda_console" }}
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:latest
-    container_name: dev-redpanda-console-${DEVENV_SUFFIX}
+    container_name: {{ containerName "redpanda-console" }}
     env_file:
       - .env.s21-cli
     ports:
       - "${REDPANDA_CONSOLE_PORT}:8080"
     environment:
-      KAFKA_BROKERS: redpanda-${DEVENV_SUFFIX}:9092
+      KAFKA_BROKERS: redpanda:9092
       CONSOLE_BASIC_AUTH_USERNAME: admin
       CONSOLE_BASIC_AUTH_PASSWORD: admin
     depends_on:
-      - redpanda-${DEVENV_SUFFIX}
+      redpanda:
+        condition: service_healthy
+        required: true
     networks:
       - dev_network
 {{- end }}
@@ -148,17 +152,31 @@ networks:
 // ComposeData содержит данные для генерации docker-compose файла
 type ComposeData struct {
 	*Config
-	Suffix string
+	ContainerNames map[string]string // Маппинг сервис -> имя контейнера
 }
 
 // GenerateCompose генерирует docker-compose.yml файл на основе конфигурации
 func GenerateCompose(config *Config, outputPath string) error {
 	// Генерируем уникальный суффикс для этого запуска
+	// Генерируем уникальные имена для контейнеров
+	suffix := generateRandomSuffix()
+	containerNames := make(map[string]string)
+	containerNames["postgres"] = fmt.Sprintf("dev-postgres-%s", suffix)
+	containerNames["redis"] = fmt.Sprintf("dev-redis-%s", suffix)
+	containerNames["redpanda"] = fmt.Sprintf("dev-redpanda-%s", suffix)
+	containerNames["init-topics"] = fmt.Sprintf("dev-init-topics-%s", suffix)
+	containerNames["redpanda-console"] = fmt.Sprintf("dev-redpanda-console-%s", suffix)
+
 	data := ComposeData{
-		Config: config,
-		Suffix: generateRandomSuffix(),
+		Config:         config,
+		ContainerNames: containerNames,
 	}
-	tmpl, err := template.New("compose").Parse(composeTemplate)
+	funcMap := template.FuncMap{
+		"containerName": func(service string) string {
+			return data.ContainerNames[service]
+		},
+	}
+	tmpl, err := template.New("compose").Funcs(funcMap).Parse(composeTemplate)
 	if err != nil {
 		return fmt.Errorf("ошибка при парсинге шаблона: %v", err)
 	}
