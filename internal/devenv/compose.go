@@ -1,11 +1,22 @@
 package devenv
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"text/template"
 )
+
+// generateRandomSuffix генерирует случайный суффикс для имен контейнеров
+func generateRandomSuffix() string {
+	bytes := make([]byte, 4) // 8 символов в hex
+	if _, err := rand.Read(bytes); err != nil {
+		return "fallback"
+	}
+	return hex.EncodeToString(bytes)
+}
 
 const composeTemplate = `version: '3.8'
 # Автоматически сгенерированный файл, не редактируйте его вручную!
@@ -15,7 +26,7 @@ services:
 {{- if .Services.IsEnabled "postgres" }}
   postgres:
     image: postgres:15
-    container_name: dev-postgres
+    container_name: dev-postgres-${DEVENV_SUFFIX}
     env_file:
       - .env.s21-cli
     environment:
@@ -33,7 +44,7 @@ services:
 {{- if .Services.IsEnabled "redis" }}
   redis:
     image: redis:alpine
-    container_name: dev-redis
+    container_name: dev-redis-${DEVENV_SUFFIX}
     env_file:
       - .env.s21-cli
     ports:
@@ -47,7 +58,7 @@ services:
 {{- if .Services.IsEnabled "redpanda" }}
   redpanda:
     image: redpandadata/redpanda:latest
-    container_name: dev-redpanda
+    container_name: dev-redpanda-${DEVENV_SUFFIX}
     env_file:
       - .env.s21-cli
     ports:
@@ -73,7 +84,7 @@ services:
       - --kafka-addr
       - PLAINTEXT://0.0.0.0:9092
       - --advertise-kafka-addr
-      - PLAINTEXT://redpanda:9092
+      - PLAINTEXT://redpanda-${DEVENV_SUFFIX}:9092
     healthcheck:
       test: ["CMD", "rpk", "cluster", "health"]
       interval: 10s
@@ -84,9 +95,9 @@ services:
 {{- if and (.Services.IsEnabled "redpanda") .Services.Redpanda.Topics }}
   init-topics:
     image: redpandadata/redpanda:latest
-    container_name: dev-init-topics
+    container_name: dev-init-topics-${DEVENV_SUFFIX}
     depends_on:
-      redpanda:
+      redpanda-${DEVENV_SUFFIX}:
         condition: service_healthy
     networks:
       - dev_network
@@ -96,7 +107,7 @@ services:
       - |
         {{- range .Services.Redpanda.Topics }}
         echo "Creating topic {{.Name}}..."
-        rpk topic create {{.Name}} --brokers redpanda:9092 --partitions {{.Partitions}} --replicas {{.ReplicationFactor}} || echo "Topic {{.Name}} might already exist"
+        rpk topic create {{.Name}} --brokers redpanda-${DEVENV_SUFFIX}:9092 --partitions {{.Partitions}} --replicas {{.ReplicationFactor}} || echo "Topic {{.Name}} might already exist"
         {{- end }}
         echo "All topics have been created!"
 {{- end }}
@@ -104,17 +115,17 @@ services:
 {{- if .Services.IsEnabled "redpanda_console" }}
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:latest
-    container_name: dev-redpanda-console
+    container_name: dev-redpanda-console-${DEVENV_SUFFIX}
     env_file:
       - .env.s21-cli
     ports:
       - "${REDPANDA_CONSOLE_PORT}:8080"
     environment:
-      KAFKA_BROKERS: redpanda:9092
+      KAFKA_BROKERS: redpanda-${DEVENV_SUFFIX}:9092
       CONSOLE_BASIC_AUTH_USERNAME: admin
       CONSOLE_BASIC_AUTH_PASSWORD: admin
     depends_on:
-      - redpanda
+      - redpanda-${DEVENV_SUFFIX}
     networks:
       - dev_network
 {{- end }}
@@ -134,8 +145,19 @@ networks:
   dev_network:
     driver: bridge`
 
+// ComposeData содержит данные для генерации docker-compose файла
+type ComposeData struct {
+	*Config
+	Suffix string
+}
+
 // GenerateCompose генерирует docker-compose.yml файл на основе конфигурации
 func GenerateCompose(config *Config, outputPath string) error {
+	// Генерируем уникальный суффикс для этого запуска
+	data := ComposeData{
+		Config: config,
+		Suffix: generateRandomSuffix(),
+	}
 	tmpl, err := template.New("compose").Parse(composeTemplate)
 	if err != nil {
 		return fmt.Errorf("ошибка при парсинге шаблона: %v", err)
@@ -154,7 +176,7 @@ func GenerateCompose(config *Config, outputPath string) error {
 	defer file.Close()
 
 	// Генерируем содержимое
-	if err := tmpl.Execute(file, config); err != nil {
+	if err := tmpl.Execute(file, data); err != nil {
 		return fmt.Errorf("ошибка при генерации файла: %v", err)
 	}
 

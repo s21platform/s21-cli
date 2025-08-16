@@ -9,6 +9,8 @@ import (
 
 // GenerateEnvFile создает .env файл на основе конфигурации
 func GenerateEnvFile(config *Config, outputPath string) error {
+	// Генерируем уникальный суффикс для этого запуска
+	suffix := generateRandomSuffix()
 	// Создаем базовые переменные окружения из конфигурации сервисов
 	envVars := make(map[string]string)
 
@@ -22,6 +24,9 @@ func GenerateEnvFile(config *Config, outputPath string) error {
 	if config.Services.IsEnabled("redpanda") {
 		envVars["KAFKA_HOST"] = "localhost"
 	}
+
+	// Добавляем суффикс для уникальных имен контейнеров
+	envVars["DEVENV_SUFFIX"] = suffix
 
 	// Добавляем пользовательские переменные (они могут перезаписать автоматически созданные)
 	for key, value := range config.Env {
