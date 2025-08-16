@@ -2,9 +2,9 @@ package devenv
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/BurntSushi/toml"
+	userconfig "github.com/s21platform/s21-cli/internal/config"
 )
 
 // Config представляет структуру конфигурационного файла devenv.toml
@@ -12,6 +12,13 @@ type Config struct {
 	Services ServicesConfig    `toml:"services"`
 	Env      map[string]string `toml:"env,omitempty"`
 	Creds    CredsConfig       `toml:"creds"`
+	EnvMaps  []EnvMap          `toml:"env_maps,omitempty"`
+}
+
+// EnvMap описывает маппинг переменных окружения
+type EnvMap struct {
+	From string `toml:"from"` // Исходная переменная (например, POSTGRES_USER)
+	To   string `toml:"to"`   // Целевая переменная (например, SERVICE_NAME_POSTGRES_USER)
 }
 
 // CredsConfig конфигурация сервиса учетных данных
@@ -42,7 +49,7 @@ type RedisConfig struct {
 // RedpandaConfig конфигурация Redpanda
 type RedpandaConfig struct {
 	Enabled bool    `toml:"enabled"`
-	Topics  []Topic `toml:"topics"`
+	Topics  []Topic `toml:"topics,omitempty"`
 }
 
 // Topic конфигурация топика Kafka
@@ -65,52 +72,18 @@ func (c *ServicesConfig) IsEnabled(service string) bool {
 	case "redis":
 		return c.Redis != nil && c.Redis.Enabled
 	case "redpanda":
-		return c.Redpanda != nil && c.Redpanda.Enabled
+		if c.Redpanda == nil {
+			return false
+		}
+		if c.Redpanda.Topics == nil {
+			c.Redpanda.Topics = []Topic{}
+		}
+		return c.Redpanda.Enabled
 	case "redpanda_console":
 		return c.RedpandaConsole != nil && c.RedpandaConsole.Enabled
 	default:
 		return false
 	}
-}
-
-// ValidateEnv проверяет наличие необходимых переменных окружения
-func (c *Config) ValidateEnv() error {
-	var missingVars []string
-
-	// Проверяем переменные для PostgreSQL
-	if c.Services.IsEnabled("postgres") {
-		requiredVars := []string{
-			"POSTGRES_USER",
-			"POSTGRES_PASSWORD",
-			"POSTGRES_DB",
-			"POSTGRES_PORT",
-		}
-		for _, v := range requiredVars {
-			if _, exists := c.Env[v]; !exists {
-				missingVars = append(missingVars, v)
-			}
-		}
-	}
-
-	// Проверяем переменные для Redis
-	if c.Services.IsEnabled("redis") {
-		if _, exists := c.Env["REDIS_PORT"]; !exists {
-			missingVars = append(missingVars, "REDIS_PORT")
-		}
-	}
-
-	// Проверяем переменные для Redpanda
-	if c.Services.IsEnabled("redpanda") {
-		if _, exists := c.Env["KAFKA_PORT"]; !exists {
-			missingVars = append(missingVars, "KAFKA_PORT")
-		}
-	}
-
-	if len(missingVars) > 0 {
-		return fmt.Errorf("не указаны обязательные переменные окружения в секции [env]:\n%s\n\nДобавьте их в секцию [env] вашего devenv.toml файла", strings.Join(missingVars, "\n"))
-	}
-
-	return nil
 }
 
 // LoadConfig загружает конфигурацию из TOML файла
@@ -120,10 +93,52 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("ошибка при чтении конфигурации: %v", err)
 	}
 
-	// Проверяем наличие необходимых переменных
-	// if err := config.ValidateEnv(); err != nil {
-	// 	return nil, err
-	// }
+	// Получаем пользовательскую конфигурацию
+	userCfg, err := userconfig.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при чтении конфигурации пользователя: %v", err)
+	}
+
+	// Добавляем nickname в переменные окружения
+	if userCfg.Nickname != "" {
+		if config.Env == nil {
+			config.Env = make(map[string]string)
+		}
+		config.Env["ENV"] = userCfg.Nickname
+	}
+
+	// Применяем маппинг переменных
+	if err := config.applyEnvMaps(); err != nil {
+		return nil, fmt.Errorf("ошибка при маппинге переменных: %v", err)
+	}
 
 	return &config, nil
+}
+
+// applyEnvMaps применяет маппинг переменных окружения
+func (c *Config) applyEnvMaps() error {
+	if len(c.EnvMaps) == 0 {
+		return nil
+	}
+
+	if c.Env == nil {
+		c.Env = make(map[string]string)
+	}
+
+	// Создаем временную копию для новых значений
+	newEnv := make(map[string]string)
+
+	// Применяем каждый маппинг
+	for _, mapping := range c.EnvMaps {
+		if value, exists := c.Env[mapping.From]; exists {
+			newEnv[mapping.To] = value
+		}
+	}
+
+	// Добавляем новые значения в основную мапу
+	for k, v := range newEnv {
+		c.Env[k] = v
+	}
+
+	return nil
 }

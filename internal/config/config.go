@@ -8,7 +8,8 @@ import (
 )
 
 type Config struct {
-	Token string `json:"token"`
+	Token    string `json:"token"`
+	Nickname string `json:"nickname"`
 }
 
 // GetConfigDir возвращает путь к директории конфигурации

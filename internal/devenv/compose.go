@@ -81,7 +81,7 @@ services:
       retries: 5
 {{- end }}
 
-{{- if .Services.Redpanda.Topics }}
+{{- if and (.Services.IsEnabled "redpanda") .Services.Redpanda.Topics }}
   init-topics:
     image: redpandadata/redpanda:latest
     container_name: dev-init-topics

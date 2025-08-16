@@ -12,16 +12,36 @@ services = [
     "community"
 ]
 
-# Базовые настройки приложения
+# Маппинг переменных окружения
+# Используется для копирования значений из одних переменных в другие
+[[env_maps]]
+from = "POSTGRES_USER"     # Исходная переменная
+to = "MATERIALS_SERVICE_POSTGRES_USER"  # Целевая переменная
+
+[[env_maps]]
+from = "POSTGRES_PASSWORD"
+to = "MATERIALS_SERVICE_POSTGRES_PASSWORD"
+
+[[env_maps]]
+from = "POSTGRES_DB"
+to = "MATERIALS_SERVICE_POSTGRES_DB"
+
+# Переменные окружения
 [env]
+# Базовые настройки
 APP_ENV = "local"
 APP_DEBUG = "true"
 APP_PORT = "8080"
 
-# Учетные данные для Redpanda Console
+# Настройки сервисов
+POSTGRES_USER = "postgres"
+POSTGRES_PASSWORD = "postgres"
+POSTGRES_DB = "app"
+POSTGRES_PORT = "5432"
+KAFKA_PORT = "9092"
 REDPANDA_CONSOLE_PORT = "18080"
 
-# Конфигурация инфраструктурных сервисов
+# Инфраструктурные сервисы
 [services.postgres]
 enabled = true
 
@@ -30,7 +50,7 @@ enabled = true
 
 [services.redpanda]
 enabled = true
-# Список топиков для автоматического создания
+# Список топиков для автоматического создания (опционально)
 topics = [
     { name = "notifications", partitions = 3, replication_factor = 1 },
     { name = "user-events", partitions = 3, replication_factor = 1 },
