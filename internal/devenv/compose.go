@@ -8,18 +8,22 @@ import (
 )
 
 const composeTemplate = `version: '3.8'
+# Автоматически сгенерированный файл, не редактируйте его вручную!
+# Используйте devenv.toml для настройки окружения.
 
 services:
 {{- if .Services.IsEnabled "postgres" }}
   postgres:
-    image: postgres:{{ .Services.Postgres.Version }}
+    image: postgres:15
     container_name: dev-postgres
+    env_file:
+      - .env.s21-cli
     environment:
-      POSTGRES_USER: {{ .Services.Postgres.User }}
-      POSTGRES_PASSWORD: {{ .Services.Postgres.Password }}
-      POSTGRES_DB: {{ .Services.Postgres.Database }}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "{{ .Services.Postgres.Port }}:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -28,10 +32,12 @@ services:
 
 {{- if .Services.IsEnabled "redis" }}
   redis:
-    image: redis:{{ .Services.Redis.Version }}
+    image: redis:alpine
     container_name: dev-redis
+    env_file:
+      - .env.s21-cli
     ports:
-      - "{{ .Services.Redis.Port }}:6379"
+      - "${REDIS_PORT}:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -40,10 +46,12 @@ services:
 
 {{- if .Services.IsEnabled "redpanda" }}
   redpanda:
-    image: redpandadata/redpanda:{{ .Services.Redpanda.Version }}
+    image: redpandadata/redpanda:latest
     container_name: dev-redpanda
+    env_file:
+      - .env.s21-cli
     ports:
-      - "{{ .Services.Redpanda.Port }}:9092"
+      - "${KAFKA_PORT}:9092"
       - "9644:9644"
     volumes:
       - redpanda_data:/var/lib/redpanda/data
@@ -66,6 +74,49 @@ services:
       - PLAINTEXT://0.0.0.0:9092
       - --advertise-kafka-addr
       - PLAINTEXT://redpanda:9092
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+{{- end }}
+
+{{- if .Services.Redpanda.Topics }}
+  init-topics:
+    image: redpandadata/redpanda:latest
+    container_name: dev-init-topics
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - dev_network
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        {{- range .Services.Redpanda.Topics }}
+        echo "Creating topic {{.Name}}..."
+        rpk topic create {{.Name}} --brokers redpanda:9092 --partitions {{.Partitions}} --replicas {{.ReplicationFactor}} || echo "Topic {{.Name}} might already exist"
+        {{- end }}
+        echo "All topics have been created!"
+{{- end }}
+
+{{- if .Services.IsEnabled "redpanda_console" }}
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: dev-redpanda-console
+    env_file:
+      - .env.s21-cli
+    ports:
+      - "${REDPANDA_CONSOLE_PORT}:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CONSOLE_BASIC_AUTH_USERNAME: admin
+      CONSOLE_BASIC_AUTH_PASSWORD: admin
+    depends_on:
+      - redpanda
+    networks:
+      - dev_network
 {{- end }}
 
 volumes:

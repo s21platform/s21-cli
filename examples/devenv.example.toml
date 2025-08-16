@@ -1,36 +1,41 @@
 # Конфигурация локального окружения разработки
 # Этот файл должен находиться в корне вашего проекта
 
-# Конфигурация PostgreSQL
+# Конфигурация сервиса учетных данных
+[creds]
+enabled = true
+endpoint = "localhost:50051"
+# Список сервисов, для которых нужно получить учетные данные
+services = [
+    "notification",
+    "user",
+    "community"
+]
+
+# Базовые настройки приложения
+[env]
+APP_ENV = "local"
+APP_DEBUG = "true"
+APP_PORT = "8080"
+
+# Учетные данные для Redpanda Console
+REDPANDA_CONSOLE_PORT = "18080"
+
+# Конфигурация инфраструктурных сервисов
 [services.postgres]
-# Включить/выключить сервис
 enabled = true
-# Версия образа postgres (рекомендуется использовать конкретную версию)
-version = "15"
-# Порт, на котором будет доступен PostgreSQL (будет прокинут на хост-машину)
-port = 5432
-# Пользователь базы данных
-user = "postgres"
-# Пароль пользователя
-password = "postgres"
-# Имя базы данных, которая будет создана при первом запуске
-database = "app"
 
-# Конфигурация Redis
 [services.redis]
-# Включить/выключить сервис
 enabled = true
-# Версия образа redis (alpine - легковесная версия)
-version = "alpine"
-# Порт, на котором будет доступен Redis
-port = 6379
 
-# Конфигурация Redpanda (совместима с Kafka)
 [services.redpanda]
-# Включить/выключить сервис
 enabled = true
-# Версия образа redpanda
-version = "latest"
-# Основной порт для Kafka API
-port = 9092
-# Дополнительный порт для Admin API (9644) будет прокинут автоматически
+# Список топиков для автоматического создания
+topics = [
+    { name = "notifications", partitions = 3, replication_factor = 1 },
+    { name = "user-events", partitions = 3, replication_factor = 1 },
+    { name = "community-events", partitions = 3, replication_factor = 1 }
+]
+
+[services.redpanda_console]
+enabled = true  # Включает Redpanda Console UI на http://localhost:18080

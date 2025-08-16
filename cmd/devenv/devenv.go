@@ -17,6 +17,7 @@ func NewDevenvCmd() *cobra.Command {
 	// Добавляем подкоманды
 	cmd.AddCommand(newStartCmd())
 	cmd.AddCommand(newFinishCmd())
+	cmd.AddCommand(newLoadCmd())
 
 	return cmd
 }

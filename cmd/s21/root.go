@@ -52,7 +52,6 @@ var rootCmd = &cobra.Command{
 // Execute выполняет корневую команду
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
 		os.Exit(1)
 	}
 }
@@ -64,6 +63,9 @@ func AddCommands() {
 
 	// Регистрируем команду devenv
 	rootCmd.AddCommand(devenv.NewDevenvCmd())
+
+	// Регистрируем команду login
+	rootCmd.AddCommand(newLoginCmd())
 
 	// Регистрируем команду версии
 	rootCmd.AddCommand(newVersionCmd())

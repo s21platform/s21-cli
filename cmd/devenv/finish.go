@@ -15,13 +15,15 @@ func newFinishCmd() *cobra.Command {
 		Long: `Команда finish останавливает все сервисы, запущенные через docker-compose,
 и удаляет созданные контейнеры.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			composeFile := "docker-compose.s21-cli.yml"
+
 			// Проверяем наличие docker-compose.yml
-			if _, err := os.Stat("docker-compose.yml"); os.IsNotExist(err) {
-				return fmt.Errorf("файл docker-compose.yml не найден")
+			if _, err := os.Stat(composeFile); os.IsNotExist(err) {
+				return fmt.Errorf("файл %s не найден", composeFile)
 			}
 
 			// Выполняем docker-compose down
-			dockerCmd := exec.Command("docker-compose", "down", "-v")
+			dockerCmd := exec.Command("docker-compose", "-f", composeFile, "down", "-v")
 			dockerCmd.Stdout = os.Stdout
 			dockerCmd.Stderr = os.Stderr
 
@@ -29,9 +31,12 @@ func newFinishCmd() *cobra.Command {
 				return fmt.Errorf("ошибка при остановке окружения: %v", err)
 			}
 
-			// Удаляем сгенерированный docker-compose.yml
-			if err := os.Remove("docker-compose.yml"); err != nil {
-				return fmt.Errorf("ошибка при удалении docker-compose.yml: %v", err)
+			// Удаляем сгенерированные файлы
+			files := []string{composeFile, ".env.s21-cli"}
+			for _, file := range files {
+				if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("ошибка при удалении файла %s: %v", file, err)
+				}
 			}
 
 			return nil
